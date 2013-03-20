@@ -64,7 +64,6 @@ RASPBIAN_KEY_FILE=$(downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}")
 if [ -d "$DEBOOTSTRAP_DIR" ]; then
     echo "Debootstrap directory $DEBOOTSTRAP_DIR already exists.  Skipping debootstrap step"
 else
-#    echo "TODO: fix GPG" >&2
     sudo qemu-debootstrap --arch armhf --include=ca-certificates --keyring="${RASPBIAN_KEY_FILE}" $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
 fi
 
