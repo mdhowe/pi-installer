@@ -30,6 +30,8 @@ ARCHIVE_KEYRING="${APT_GPG_PARTS}/mh-archive-michaelhowe.org.gpg"
 DEBIAN_ARCHIVE_KEYRING="/usr/share/keyrings/debian-archive-keyring.gpg"
 RPI_KEY="http://archive.raspberrypi.org/debian/raspberrypi.gpg.key"
 RPI_KEY_SHA256="76603890d82a492175caf17aba68dc73acb1189c9fd58ec0c19145dfa3866d56"
+RASPBIAN_KEY="http://archive.raspbian.org/raspbian.public.key"
+RASPBIAN_KEY_SHA256="886b3a94c1000356535cc7e7404696f93b43278c0983c3f0fa81f1f17466c435"
 
 # To keep the xen-tools things happy:
 verbose=1
@@ -44,22 +46,27 @@ if [ -z "$NEW_HOSTNAME" ]; then
     exit 1
 fi
 
+APP_TEMPDIR=`mktemp -d /tmp/pi-installer.XXXXXXXX`
+export APP_TEMPDIR
+
+cleanup ()
+{
+    enableStartStopDaemon "${DEBOOTSTRAP_DIR}" || true
+    umountProc "${DEBOOTSTRAP_DIR}" || true
+    echo "Command failed, cleaning up.  You need to manually remove '${APP_TEMPDIR}' yourself" >&2
+}
+
+trap 'cleanup' EXIT
+
+downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}"
+
+RASPBIAN_KEY_FILE=$(downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}")
 if [ -d "$DEBOOTSTRAP_DIR" ]; then
     echo "Debootstrap directory $DEBOOTSTRAP_DIR already exists.  Skipping debootstrap step"
 else
-    echo "TODO: fix GPG" >&2
-    sudo qemu-debootstrap --arch armhf --include=ca-certificates --no-check-gpg $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
+#    echo "TODO: fix GPG" >&2
+    sudo qemu-debootstrap --arch armhf --include=ca-certificates --keyring="${RASPBIAN_KEY_FILE}" $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
 fi
-
-#echo "Setting up firmware"
-#mkdir -p "$GIT_FIRMWARE_DIR"
-#if [ ! -d "${GIT_FIRMWARE_DIR}/.git" ]; then
-#    echo "Looks like ${GIT_FIRMWARE_DIR} doesn't exist as a git clone - running git clone $GIT_FIRMWARE_URL"
-#    git clone "$GIT_FIRMWARE_URL" "$GIT_FIRMWARE_DIR"
-#else
-#    echo "Checking and updating ${GIT_FIRMWARE_DIR}"
-#    git --git-dir="${GIT_FIRMWARE_DIR}/.git" --work-tree="${GIT_FIRMWARE_DIR}" pull
-#fi
 
 updateGitDirectory $GIT_FIRMWARE_DIR $GIT_FIRMWARE_URL "firmware"
 updateGitDirectory $GIT_KERNEL_DIR $GIT_KERNEL_URL "kernel"
@@ -135,16 +142,24 @@ chroot ${DEBOOTSTRAP_DIR} debconf-set-selections < $TEMP_FILE
 
 rm -f $TEMP_FILE
 
+# Configure configtool before tweaking other things
+echo "Installing configtool and running initial sync"
+installDebianPackage "${DEBOOTSTRAP_DIR}" configtool
+syncConfigtool "${DEBOOTSTRAP_DIR}"
+
+# Configure /etc/apt
+runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/apt"
+updateApt "${DEBOOTSTRAP_DIR}"
+
+
 # Standard packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" configtool vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx
+installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx
 # System-specific specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart
 # Raspberry pi specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp
 
-echo "Running initial configtool sync"
-syncConfigtool "${DEBOOTSTRAP_DIR}"
-
+# Run other configtool things
 runConfigtool "${DEBOOTSTRAP_DIR}"
 
 createKerberosKeytab "${DEBOOTSTRAP_DIR}" "host/${NEW_HOSTNAME}.${DOMAIN}@${KRB5_REALM}" "/etc/krb5.keytab"
@@ -183,8 +198,7 @@ sudo parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
 sudo mkfs.msdos ${DEVICE}1
 sudo mkfs.ext4 ${DEVICE}2
 
-echo "TODO: check mount location" >&2
-TEMP_MOUNTPOINT=/mnt/raspbian-install
+TEMP_MOUNTPOINT="${APP_TEMPDIR}/install"
 sudo mkdir -p "${TEMP_MOUNTPOINT}"
 sudo mount ${DEVICE}2 "${TEMP_MOUNTPOINT}"
 sudo mkdir "${TEMP_MOUNTPOINT}/boot"
@@ -195,3 +209,7 @@ sudo umount "${TEMP_MOUNTPOINT}/boot"
 sudo umount "${TEMP_MOUNTPOINT}"
 
 sudo eject ${DEVICE}
+
+trap - EXIT
+cleanup
+rm -rf "${APP_TEMPDIR}"

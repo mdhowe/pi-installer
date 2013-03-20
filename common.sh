@@ -17,7 +17,7 @@ mountProc ()
     umountProc $prefix
 
     mount -t proc proc "${procfile}"
-    trap "umountProc \"${prefix}\"" EXIT
+#    trap "umountProc \"${prefix}\"" EXIT
 }
 
 umountProc ()
@@ -25,14 +25,14 @@ umountProc ()
     local prefix=$1
     local procfile="${prefix}/proc"
 
-    assert "$LINENO" -d "$prefix"
-    assert "$LINENO" -d "$procfile"
+#    assert "$LINENO" -d "$prefix"
+#    assert "$LINENO" -d "$procfile"
 
     if $(mount | grep --quiet "${prefix}/proc"); then
         umount "$procfile"
     fi
     
-    trap - EXIT
+#    trap - EXIT
 }
 
 updateApt ()
@@ -54,6 +54,33 @@ debconfSetSelection ()
     echo "${selection}" | sudo chroot "${prefix}" debconf-set-selections
 }
 
+downloadGPGKey()
+{
+    local url=$1
+    local sha256sum=$2
+    assert "$LINENO" "$url"
+    assert "$LINENO" "$sha256sum"
+    assert "$LINENO" -d "$APP_TEMPDIR"
+
+    FILENAME=`echo ${url} | sed -e 's#.*/##'`
+    TEMPKEY="${APP_TEMPDIR}/${FILENAME}"
+    TEMPSUM="${APP_TEMPDIR}/${FILENAME}.sha256"
+    wget --output-document "$TEMPKEY" --quiet "$url"
+    echo -e "$sha256sum  ${TEMPKEY}" > "${TEMPSUM}"
+    sha256sum --quiet --check "${TEMPSUM}" || (
+        echo "ERROR: GPG key $url failed to checksum correctly!" >&2
+        echo "Downloaded key and checksum can be found in ${APP_TEMPDIR}" >&2
+        exit 1
+    )
+    # Check file type
+    if grep -q -- '-----BEGIN PGP PUBLIC KEY BLOCK-----' ${TEMPKEY}; then
+        GPGNAME="${TEMPKEY}.gpg"
+        gpg --keyring="${GPGNAME}" --no-default-keyring --quiet --import "${TEMPKEY}" >/dev/null
+        echo "${GPGNAME}"
+    else
+        echo "${TEMPKEY}"
+    fi
+}
 installAptKeyFromURL ()
 {
     local prefix=$1
@@ -64,23 +91,21 @@ installAptKeyFromURL ()
     assert "$LINENO" "$url"
     assert "$LINENO" "$sha256sum"
 
-    TEMPDIR=`mktemp -d /tmp/apt-key.XXXXXXXX`
-# TODO: better trimming?
-    FILENAME=`echo ${url} | sed -e 's#.*/##'`
-    TEMPKEY="${TEMPDIR}/${FILENAME}"
-    TEMPSUM="${TEMPDIR}/${FILENAME}.sha256"
-    wget --output-document "$TEMPKEY" "$url"
-    echo -e "$sha256sum  ${TEMPKEY}" > "${TEMPSUM}"
-    sha256sum --check "${TEMPSUM}" || (
-        echo "ERROR: GPG key $url failed to checksum correctly!" >&2
-        echo "Downloaded key and checksum can be found in ${TEMPDIR}" >&2
-        exit 1
-    )
+    GPG_FILE=`downloadGPGKey $url $sha256sum`
+
+    installAptKeyFromFile ${prefix} "${GPG_FILE}"
+}
+
+installAptKeyFromFile ()
+{
+    local prefix=$1
+    local file=$2
+
+    assert "$LINENO" "$prefix"
+    assert "$LINENO" -f "$file"
 
     echo "Results of apt-key add:"
-    cat "${TEMPKEY}" | sudo chroot "${prefix}" apt-key add -
- 
-    rm -rf "${TEMPDIR}"
+    cat "${file}" | sudo chroot "${prefix}" apt-key add -
 }
 
 # TODO: replace this with abr
@@ -108,14 +133,18 @@ syncConfigtool ()
 runConfigtool ()
 {
     local prefix=$1
+    local destdir="/"
+    if [ $# -gt 1 ]; then
+        destdir=$2
+    fi
 
     assert "${LINENO}" -d "${prefix}"
 
     disableStartStopDaemon "${prefix}"
-    trap "enableStartStopDaemon \"${prefix}\"" EXIT
-    sudo chroot "${prefix}" configtool --nopost || logMessage "Configtool failed: $?"
+#    trap "enableStartStopDaemon \"${prefix}\"" EXIT
+    sudo chroot "${prefix}" configtool --nopost --force $destdir || logMessage "Configtool failed: $?"
     enableStartStopDaemon "${prefix}"
-    trap - EXIT
+#    trap - EXIT
 
     # These are normally tidied up by postct scripts, but we don't run them
     logMessage "Tidying up ctold files"
@@ -215,4 +244,8 @@ copyKernelSource ()
     logMessage "Hacking kernel version to add '+'"
     sudo chroot "${prefix}" sed -i -e 's/^EXTRAVERSION =$/EXTRAVERSION = +/' "${DEST}/Makefile"
     sudo chroot "$prefix" ln -sf "${DEST}" "${DEST}+"
+    MODULES_LIBDIR="/lib/modules/${KVER}+"
+    for i in build source; do
+        sudo chroot "${prefix}" ln -sf "${DEST}" "${MODULES_LIBDIR}/$i"
+    done
 }
