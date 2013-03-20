@@ -41,6 +41,12 @@ OLD_LANG=$LANG
 unset LANG
 export LC_ALL=C
 
+# Check we're running as root (or lots of things will fail):
+if [[ $(/usr/bin/id -u) -ne 0 ]]; then
+    echo "Error: script must be run as root" >&2
+    exit 1
+fi
+
 if [ -z "$NEW_HOSTNAME" ]; then
     echo "Usage: $0 hostname.fqdn" >&2
     exit 1
@@ -64,37 +70,37 @@ RASPBIAN_KEY_FILE=$(downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}")
 if [ -d "$DEBOOTSTRAP_DIR" ]; then
     echo "Debootstrap directory $DEBOOTSTRAP_DIR already exists.  Skipping debootstrap step"
 else
-    sudo qemu-debootstrap --arch armhf --include=ca-certificates --keyring="${RASPBIAN_KEY_FILE}" $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
+    qemu-debootstrap --arch armhf --include=ca-certificates --keyring="${RASPBIAN_KEY_FILE}" $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
 fi
 
 updateGitDirectory $GIT_FIRMWARE_DIR $GIT_FIRMWARE_URL "firmware"
 updateGitDirectory $GIT_KERNEL_DIR $GIT_KERNEL_URL "kernel"
-sudo wget -O "${GIT_KERNEL_DIR}/Module.symvers" https://github.com/raspberrypi/firmware/raw/master/extra/Module.symvers
+wget -O "${GIT_KERNEL_DIR}/Module.symvers" https://github.com/raspberrypi/firmware/raw/master/extra/Module.symvers
 
-sudo mkdir -p "${DEBOOTSTRAP_DIR}/opt/"
-sudo cp -R "${GIT_FIRMWARE_DIR}/hardfp/opt/"* "${DEBOOTSTRAP_DIR}/opt/"
+mkdir -p "${DEBOOTSTRAP_DIR}/opt/"
+cp -R "${GIT_FIRMWARE_DIR}/hardfp/opt/"* "${DEBOOTSTRAP_DIR}/opt/"
 
-sudo mkdir -p "${DEBOOTSTRAP_DIR}/boot"
-sudo cp -R "${GIT_FIRMWARE_DIR}/boot/"* "${DEBOOTSTRAP_DIR}/boot/"
+mkdir -p "${DEBOOTSTRAP_DIR}/boot"
+cp -R "${GIT_FIRMWARE_DIR}/boot/"* "${DEBOOTSTRAP_DIR}/boot/"
 
-sudo mkdir -p "${DEBOOTSTRAP_DIR}/lib/modules"
-sudo cp -R "${GIT_FIRMWARE_DIR}/modules/"* "${DEBOOTSTRAP_DIR}/lib/modules/"
+mkdir -p "${DEBOOTSTRAP_DIR}/lib/modules"
+cp -R "${GIT_FIRMWARE_DIR}/modules/"* "${DEBOOTSTRAP_DIR}/lib/modules/"
 
 copyKernelSource "${DEBOOTSTRAP_DIR}" "${GIT_KERNEL_DIR}" "/usr/src"
 
 echo "Configuring minimal apt setup"
 SOURCES_LIST="${DEBOOTSTRAP_DIR}/etc/apt/sources.list"
 SOURCES_DIR="${DEBOOTSTRAP_DIR}/etc/apt/sources.list.d"
-sudo sh -c "echo 'deb $MIRROR $RELEASE main contrib non-free rpi' > $SOURCES_LIST"
-sudo sh -c "echo 'deb http://debian.internal.michaelhowe.org/ internal main contrib non-free' >> $SOURCES_LIST"
-sudo sh -c "echo 'deb http://archive.raspberrypi.org/debian/ wheezy main' > ${SOURCES_DIR}/raspi.list"
-sudo sh -c "echo 'deb http://mirror.ox.ac.uk/debian unstable main' >> ${SOURCES_LIST}"
+echo 'deb $MIRROR $RELEASE main contrib non-free rpi' > $SOURCES_LIST
+echo 'deb http://debian.internal.michaelhowe.org/ internal main contrib non-free' >> $SOURCES_LIST
+echo 'deb http://archive.raspberrypi.org/debian/ wheezy main' > ${SOURCES_DIR}/raspi.list
+echo 'deb http://mirror.ox.ac.uk/debian unstable main' >> ${SOURCES_LIST}
 
 echo "Setting up local trust"
 if [ -f "$LOCAL_CERT" ]; then
-    sudo mkdir -p "$TARGET_CERT_DIR"
-    sudo cp "$LOCAL_CERT" "$TARGET_CERT_DIR"
-    sudo chroot "$DEBOOTSTRAP_DIR" /usr/sbin/update-ca-certificates
+    mkdir -p "$TARGET_CERT_DIR"
+    cp "$LOCAL_CERT" "$TARGET_CERT_DIR"
+    chroot "$DEBOOTSTRAP_DIR" /usr/sbin/update-ca-certificates
 fi
 
 # Ewwwwwww
@@ -105,10 +111,10 @@ installAptKeyFromURL "${DEBOOTSTRAP_DIR}" "${RPI_KEY}" "${RPI_KEY_SHA256}"
 # Then, run apt-get update, and install the package for the keyring.
 # In the debian case, remove the file we created since the package creates individual ones
 if [ -f "$ARCHIVE_KEYRING" ]; then
-    sudo cp "$ARCHIVE_KEYRING" "${DEBOOTSTRAP_DIR}/${ARCHIVE_KEYRING}"
+    cp "$ARCHIVE_KEYRING" "${DEBOOTSTRAP_DIR}/${ARCHIVE_KEYRING}"
 fi
 if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
-    sudo cp "${DEBIAN_ARCHIVE_KEYRING}" "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
+    cp "${DEBIAN_ARCHIVE_KEYRING}" "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
 fi
 updateApt "${DEBOOTSTRAP_DIR}"
 [ -f "$ARCHIVE_KEYRING" ] && installDebianPackage ${DEBOOTSTRAP_DIR} mh-archive-keyring
@@ -127,7 +133,7 @@ export LANG=$OLD_LANG
 unset LC_ALL
 
 echo "Setting up hostname"
-sudo sh -c "echo \"$NEW_HOSTNAME\" > \"${DEBOOTSTRAP_DIR}/etc/hostname\""
+echo "$NEW_HOSTNAME" > "${DEBOOTSTRAP_DIR}/etc/hostname"
 
 #
 # Preseed answers
@@ -172,13 +178,13 @@ addUserToGroup "${DEBOOTSTRAP_DIR}" "michael" "src"
 
 echo "Tweaking time"
 if [ -f "${DEBOOTSTRAP_DIR}/etc/init.d/hwclock.sh" ]; then
-    sudo chroot "${DEBOOTSTRAP_DIR}" /usr/sbin/update-rc.d -f hwclock.sh remove
+    chroot "${DEBOOTSTRAP_DIR}" /usr/sbin/update-rc.d -f hwclock.sh remove
 fi
-sudo chroot "${DEBOOTSTRAP_DIR}" fake-hwclock save
+chroot "${DEBOOTSTRAP_DIR}" fake-hwclock save
 
 echo "Setting temporary root password"
 CRYPT_PASSWORD=`mkpasswd ${TEMP_ROOT_PASSWORD} RP`
-sudo chroot "${DEBOOTSTRAP_DIR}" usermod --password "${CRYPT_PASSWORD}" root
+chroot "${DEBOOTSTRAP_DIR}" usermod --password "${CRYPT_PASSWORD}" root
 
 enableStartStopDaemon "${DEBOOTSTRAP_DIR}"
 set -x
@@ -189,25 +195,25 @@ if [ ! -b ${DEVICE} ]; then
     echo "ERROR: device ${DEVICE} does not exist" >&2
     exit 1
 fi
-sudo parted --script ${DEVICE} mklabel msdos
-sudo parted --script --align optimal ${DEVICE} mkpart primary fat16 '0%' 64M
-sudo parted --script ${DEVICE} set 1 lba on
-sudo parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
+parted --script ${DEVICE} mklabel msdos
+parted --script --align optimal ${DEVICE} mkpart primary fat16 '0%' 64M
+parted --script ${DEVICE} set 1 lba on
+parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
 
-sudo mkfs.msdos ${DEVICE}1
-sudo mkfs.ext4 ${DEVICE}2
+mkfs.msdos ${DEVICE}1
+mkfs.ext4 ${DEVICE}2
 
 TEMP_MOUNTPOINT="${APP_TEMPDIR}/install"
-sudo mkdir -p "${TEMP_MOUNTPOINT}"
-sudo mount ${DEVICE}2 "${TEMP_MOUNTPOINT}"
-sudo mkdir "${TEMP_MOUNTPOINT}/boot"
-sudo mount ${DEVICE}1 "${TEMP_MOUNTPOINT}/boot"
-sudo rsync -avvP "${DEBOOTSTRAP_DIR}/" "${TEMP_MOUNTPOINT}/"
-sudo sync
-sudo umount "${TEMP_MOUNTPOINT}/boot"
-sudo umount "${TEMP_MOUNTPOINT}"
+mkdir -p "${TEMP_MOUNTPOINT}"
+mount ${DEVICE}2 "${TEMP_MOUNTPOINT}"
+mkdir "${TEMP_MOUNTPOINT}/boot"
+mount ${DEVICE}1 "${TEMP_MOUNTPOINT}/boot"
+rsync -avvP "${DEBOOTSTRAP_DIR}/" "${TEMP_MOUNTPOINT}/"
+sync
+umount "${TEMP_MOUNTPOINT}/boot"
+umount "${TEMP_MOUNTPOINT}"
 
-sudo eject ${DEVICE}
+eject ${DEVICE}
 
 trap - EXIT
 cleanup

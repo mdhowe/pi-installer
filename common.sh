@@ -40,7 +40,7 @@ updateApt ()
     local prefix=$1
     
     assert "$LINENO" -d "$prefix"
-    sudo chroot "${prefix}" apt-get update
+    chroot "${prefix}" apt-get update
 }
 
 debconfSetSelection ()
@@ -51,7 +51,7 @@ debconfSetSelection ()
     assert "$LINENO" -d "$prefix"
 #    assert "$LINENO" "\"$selection\""
 
-    echo "${selection}" | sudo chroot "${prefix}" debconf-set-selections
+    echo "${selection}" | chroot "${prefix}" debconf-set-selections
 }
 
 downloadGPGKey()
@@ -105,7 +105,7 @@ installAptKeyFromFile ()
     assert "$LINENO" -f "$file"
 
     echo "Results of apt-key add:"
-    cat "${file}" | sudo chroot "${prefix}" apt-key add -
+    cat "${file}" | chroot "${prefix}" apt-key add -
 }
 
 # TODO: replace this with abr
@@ -126,7 +126,7 @@ syncConfigtool ()
     assert "${LINENO}" -d "${prefix}"
 
     mountProc "${prefix}"
-    sudo chroot "${prefix}" configtool --sync
+    chroot "${prefix}" configtool --sync
     umountProc "${prefix}"
 }
 
@@ -142,14 +142,14 @@ runConfigtool ()
 
     disableStartStopDaemon "${prefix}"
 #    trap "enableStartStopDaemon \"${prefix}\"" EXIT
-    sudo chroot "${prefix}" configtool --nopost --force $destdir || logMessage "Configtool failed: $?"
+    chroot "${prefix}" configtool --nopost --force $destdir || logMessage "Configtool failed: $?"
     enableStartStopDaemon "${prefix}"
 #    trap - EXIT
 
     # These are normally tidied up by postct scripts, but we don't run them
     logMessage "Tidying up ctold files"
-    sudo chroot "${DEBOOTSTRAP_DIR}" sh -c "rm -f /etc/apt/apt.conf.d/*.ctold"
-    sudo chroot "${DEBOOTSTRAP_DIR}" sh -c "rm -f /etc/init.d/*.ctold"
+    chroot "${DEBOOTSTRAP_DIR}" sh -c "rm -f /etc/apt/apt.conf.d/*.ctold"
+    chroot "${DEBOOTSTRAP_DIR}" sh -c "rm -f /etc/init.d/*.ctold"
 }
 
 changeOwnership ()
@@ -163,7 +163,7 @@ changeOwnership ()
 
     assert "${LINENO}" -f "${prefix}/${filename}"
 
-    sudo chroot "${prefix}" chown "${ownership}" "${filename}"
+    chroot "${prefix}" chown "${ownership}" "${filename}"
     
 }
 
@@ -178,16 +178,16 @@ createUser ()
     assert "${LINENO}" "${user}"
 
     # or true - cope with set -e
-    USER_EXISTS=`sudo chroot "${prefix}" getent passwd "${user}" || true`
+    USER_EXISTS=`chroot "${prefix}" getent passwd "${user}" || true`
     if [ -n "$USER_EXISTS" ]; then
         logMessage "User $user already exists - not re-creating, but fixing up .k5login"
     else
-        sudo chroot "${prefix}" adduser --disabled-password --gecos "${gecos}" "${user}"
+        chroot "${prefix}" adduser --disabled-password --gecos "${gecos}" "${user}"
     fi
 
-    sudo chroot "${prefix}" sh -c "echo '${user}@$KRB5_REALM' >> ~${user}/.k5login && chown ${user} ~${user}/.k5login"
-    sudo chroot "${prefix}" sh -c "echo '${user}/root@$KRB5_REALM' >> ~${user}/.k5login"
-    sudo chroot "${prefix}" sh -c "echo '${user}/admin@$KRB5_REALM' >> ~${user}/.k5login"
+    chroot "${prefix}" sh -c "echo '${user}@$KRB5_REALM' >> ~${user}/.k5login && chown ${user} ~${user}/.k5login"
+    chroot "${prefix}" sh -c "echo '${user}/root@$KRB5_REALM' >> ~${user}/.k5login"
+    chroot "${prefix}" sh -c "echo '${user}/admin@$KRB5_REALM' >> ~${user}/.k5login"
 }
 
 addUserToGroup ()
@@ -200,7 +200,7 @@ addUserToGroup ()
     assert "${LINENO}" "${user}"
     assert "${LINENO}" "${group}"
 
-    sudo chroot "${prefix}" adduser "${user}" "${group}"
+    chroot "${prefix}" adduser "${user}" "${group}"
 }
 
 updateGitDirectory ()
@@ -235,17 +235,17 @@ copyKernelSource ()
     KVER=`make kernelversion`
     DEST="${destbasedir}/linux-${KVER}"
     FULL_DEST="${prefix}/${DEST}"
-    sudo mkdir -p "${FULL_DEST}"
+    mkdir -p "${FULL_DEST}"
     cp -R "${src}/"* "${FULL_DEST}"
-    sudo chroot "$prefix" ln -sf "${DEST}" "${destbasedir}/linux"
-    sudo chroot "$prefix" chgrp -R src "${DEST}"
-    sudo chroot "$prefix" chmod -R g+w "${DEST}"
+    chroot "$prefix" ln -sf "${DEST}" "${destbasedir}/linux"
+    chroot "$prefix" chgrp -R src "${DEST}"
+    chroot "$prefix" chmod -R g+w "${DEST}"
     # TODO: this probably shouldn't actually be here
     logMessage "Hacking kernel version to add '+'"
-    sudo chroot "${prefix}" sed -i -e 's/^EXTRAVERSION =$/EXTRAVERSION = +/' "${DEST}/Makefile"
-    sudo chroot "$prefix" ln -sf "${DEST}" "${DEST}+"
+    chroot "${prefix}" sed -i -e 's/^EXTRAVERSION =$/EXTRAVERSION = +/' "${DEST}/Makefile"
+    chroot "$prefix" ln -sf "${DEST}" "${DEST}+"
     MODULES_LIBDIR="/lib/modules/${KVER}+"
     for i in build source; do
-        sudo chroot "${prefix}" ln -sf "${DEST}" "${MODULES_LIBDIR}/$i"
+        chroot "${prefix}" ln -sf "${DEST}" "${MODULES_LIBDIR}/$i"
     done
 }

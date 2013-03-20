@@ -60,8 +60,8 @@ installDebianPackage ()
     #
     #  Use policy-rc to stop any daemons from starting.
     #
-    sudo sh -c "printf '#!/bin/sh\nexit 101\n' > ${prefix}/usr/sbin/policy-rc.d"
-    sudo chmod +x ${prefix}/usr/sbin/policy-rc.d
+    printf '#!/bin/sh\nexit 101\n' > ${prefix}/usr/sbin/policy-rc.d
+    chmod +x ${prefix}/usr/sbin/policy-rc.d
 
     #
     # Disable the start-stop-daemon - this shouldn't be necessary
@@ -78,7 +78,7 @@ installDebianPackage ()
     #
     #  Remove the policy-rc.d script.
     #
-    sudo rm -f ${prefix}/usr/sbin/policy-rc.d
+    rm -f ${prefix}/usr/sbin/policy-rc.d
 
     #
     # Re-enable the start-stop-daemon
@@ -98,7 +98,7 @@ disableStartStopDaemon ()
       local daemonfile="${prefix}/sbin/${starter}"
 
       if [ -e "${daemonfile}" ]; then
-        sudo mv "${daemonfile}" "${daemonfile}.REAL"
+        mv "${daemonfile}" "${daemonfile}.REAL"
       fi
       echo '#!/bin/sh' > "${daemonfile}"
       echo "echo \"Warning: Fake ${starter} called, doing nothing\"" >> "${daemonfile}"
