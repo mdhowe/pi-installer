@@ -249,3 +249,15 @@ copyKernelSource ()
         chroot "${prefix}" ln -sf "${DEST}" "${MODULES_LIBDIR}/$i"
     done
 }
+
+testVar ()
+{
+    local var=$1
+    if [ -z "$var" ]; then
+        echo 0
+    elif [ "$var" -eq "0" ]; then
+        echo 0
+    else
+        echo 1
+    fi
+}

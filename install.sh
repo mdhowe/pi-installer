@@ -5,8 +5,21 @@ set -e
     . common.sh
 
 NEW_HOSTNAME=$1
+DEVICE=$2
 
-set -u
+######################################################################
+# Customize these:
+######################################################################
+# Set the following to false (eg "" or 0) to disable them
+USE_KERBEROS=1
+
+USE_CONFIGTOOL=1
+USE_DEBIAN_KEYRING=1
+USE_LOCAL_CERT=1
+USE_LOCAL_KEYRING=1
+WRITE_IMAGE=1
+
+# Tweak the following as necessary
 
 RELEASE="wheezy"
 BASE_DIR="/mnt/scratch/raspbian"
@@ -17,21 +30,32 @@ TEMP_ROOT_PASSWORD="test"
 MIRROR="http://mirror.internal.michaelhowe.org:3142/mirror.ox.ac.uk/sites/archive.raspbian.org/archive/raspbian"
 DEBOOTSTRAP_DIR="${BASE_DIR}/debootstrap"
 
-GIT_FIRMWARE_URL="https://github.com/raspberrypi/firmware.git"
-GIT_FIRMWARE_DIR="${BASE_DIR}/firmware"
-GIT_KERNEL_URL="https://github.com/raspberrypi/linux.git"
-GIT_KERNEL_DIR="${BASE_DIR}/linux"
-
 LOCAL_CERT="/usr/local/share/ca-certificates/MichaelSecurePlaces.crt"
 TARGET_CERT_DIR="${DEBOOTSTRAP_DIR}/usr/local/share/ca-certificates"
 
 APT_GPG_PARTS="/etc/apt/trusted.gpg.d"
+
 ARCHIVE_KEYRING="${APT_GPG_PARTS}/mh-archive-michaelhowe.org.gpg"
+
 DEBIAN_ARCHIVE_KEYRING="/usr/share/keyrings/debian-archive-keyring.gpg"
 RPI_KEY="http://archive.raspberrypi.org/debian/raspberrypi.gpg.key"
 RPI_KEY_SHA256="76603890d82a492175caf17aba68dc73acb1189c9fd58ec0c19145dfa3866d56"
 RASPBIAN_KEY="http://archive.raspbian.org/raspbian.public.key"
 RASPBIAN_KEY_SHA256="886b3a94c1000356535cc7e7404696f93b43278c0983c3f0fa81f1f17466c435"
+
+GIT_FIRMWARE_URL="https://github.com/raspberrypi/firmware.git"
+GIT_FIRMWARE_DIR="${BASE_DIR}/firmware"
+GIT_KERNEL_URL="https://github.com/raspberrypi/linux.git"
+GIT_KERNEL_DIR="${BASE_DIR}/linux"
+
+TEMPDIR="/tmp"
+LOCALES_SELECTED="en_GB.UTF-8"
+LOCALES_GENERATED="en_GB.UTF-8 UTF-8"
+
+######################################################################
+# Things below here should not need modification
+######################################################################
+set -u
 
 # To keep the xen-tools things happy:
 verbose=1
@@ -48,11 +72,11 @@ if [[ $(/usr/bin/id -u) -ne 0 ]]; then
 fi
 
 if [ -z "$NEW_HOSTNAME" ]; then
-    echo "Usage: $0 hostname.fqdn" >&2
+    echo "Usage: $0 hostname /dev/of/sdcard" >&2
     exit 1
 fi
 
-APP_TEMPDIR=`mktemp -d /tmp/pi-installer.XXXXXXXX`
+APP_TEMPDIR=`mktemp -d ${TEMPDIR}/pi-installer.XXXXXXXX`
 export APP_TEMPDIR
 
 cleanup ()
@@ -94,13 +118,18 @@ SOURCES_DIR="${DEBOOTSTRAP_DIR}/etc/apt/sources.list.d"
 echo 'deb $MIRROR $RELEASE main contrib non-free rpi' > $SOURCES_LIST
 echo 'deb http://debian.internal.michaelhowe.org/ internal main contrib non-free' >> $SOURCES_LIST
 echo 'deb http://archive.raspberrypi.org/debian/ wheezy main' > ${SOURCES_DIR}/raspi.list
+# DANGER WILL ROBINSON: Debian armhf packages are NOT COMPATIBLE with the pi,
+# and will not work (arch: all packages on the other hand are fine)
 echo 'deb http://mirror.ox.ac.uk/debian unstable main' >> ${SOURCES_LIST}
 
 echo "Setting up local trust"
-if [ -f "$LOCAL_CERT" ]; then
-    mkdir -p "$TARGET_CERT_DIR"
-    cp "$LOCAL_CERT" "$TARGET_CERT_DIR"
-    chroot "$DEBOOTSTRAP_DIR" /usr/sbin/update-ca-certificates
+
+if [ -n "$USE_LOCAL_CERT" -a "$USE_LOCAL_CERT" ]; then
+    if [ -f "$LOCAL_CERT" ]; then
+        mkdir -p "$TARGET_CERT_DIR"
+        cp "$LOCAL_CERT" "$TARGET_CERT_DIR"
+        chroot "$DEBOOTSTRAP_DIR" /usr/sbin/update-ca-certificates
+    fi
 fi
 
 # Ewwwwwww
@@ -110,22 +139,32 @@ installAptKeyFromURL "${DEBOOTSTRAP_DIR}" "${RPI_KEY}" "${RPI_KEY_SHA256}"
 # Go through all the keyrings we want included and drop them in $APT_GPG_PARTS directory.
 # Then, run apt-get update, and install the package for the keyring.
 # In the debian case, remove the file we created since the package creates individual ones
-if [ -f "$ARCHIVE_KEYRING" ]; then
-    cp "$ARCHIVE_KEYRING" "${DEBOOTSTRAP_DIR}/${ARCHIVE_KEYRING}"
+if [ $(testVar $USE_LOCAL_KEYRING) ]; then
+    if [ -f "$ARCHIVE_KEYRING" ]; then
+        cp "$ARCHIVE_KEYRING" "${DEBOOTSTRAP_DIR}/${ARCHIVE_KEYRING}"
+    fi
 fi
-if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
-    cp "${DEBIAN_ARCHIVE_KEYRING}" "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
+if [ $(testVar $USE_DEBIAN_KEYRING) ]; then
+    if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
+        cp "${DEBIAN_ARCHIVE_KEYRING}" "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
+    fi
 fi
 updateApt "${DEBOOTSTRAP_DIR}"
-[ -f "$ARCHIVE_KEYRING" ] && installDebianPackage ${DEBOOTSTRAP_DIR} mh-archive-keyring
-if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
-    rm -f "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
-    installDebianPackage "${DEBOOTSTRAP_DIR}" debian-archive-keyring
+
+if [ $(testVar $USE_LOCAL_KEYRING) ]; then
+    [ -f "$ARCHIVE_KEYRING" ] && installDebianPackage ${DEBOOTSTRAP_DIR} mh-archive-keyring
+fi
+
+if [ $(testVar $USE_DEBIAN_KEYRING) ]; then
+    if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
+        rm -f "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
+        installDebianPackage "${DEBOOTSTRAP_DIR}" debian-archive-keyring
+    fi
 fi
 
 echo "Configuring locales"
-debconfSetSelection "${DEBOOTSTRAP_DIR}" "locales locales/default_environment_locale select en_GB.UTF-8"
-debconfSetSelection "${DEBOOTSTRAP_DIR}" "locales locales/locales_to_be_generated multiselect en_GB.UTF-8 UTF-8"
+debconfSetSelection "${DEBOOTSTRAP_DIR}" "locales locales/default_environment_locale select ${LOCALES_SELECTED}"
+debconfSetSelection "${DEBOOTSTRAP_DIR}" "locales locales/locales_to_be_generated multiselect ${LOCALES_GENERATED}"
 installDebianPackage "${DEBOOTSTRAP_DIR}" locales
 
 # Reset lang
@@ -138,23 +177,26 @@ echo "$NEW_HOSTNAME" > "${DEBOOTSTRAP_DIR}/etc/hostname"
 #
 # Preseed answers
 #
-NEW_HOST=$(cat ${DEBOOTSTRAP_DIR}/etc/hostname)
 TEMP_FILE=`tempfile`
 
-wget --output-document=$TEMP_FILE http://dev.internal.michaelhowe.org/configtool.debconf
-perl -p -i -e "s/NEW_HOST/$NEW_HOST/g" $TEMP_FILE
-chroot ${DEBOOTSTRAP_DIR} debconf-set-selections < $TEMP_FILE
+if [ $(testVar $USE_CONFIGTOOL) ]; then
+    wget --output-document=$TEMP_FILE http://dev.internal.michaelhowe.org/configtool.debconf
+    perl -p -i -e "s/NEW_HOST/$NEW_HOSTNAME/g" $TEMP_FILE
+    chroot ${DEBOOTSTRAP_DIR} debconf-set-selections < $TEMP_FILE
+fi
 
 rm -f $TEMP_FILE
 
-# Configure configtool before tweaking other things
-echo "Installing configtool and running initial sync"
-installDebianPackage "${DEBOOTSTRAP_DIR}" configtool
-syncConfigtool "${DEBOOTSTRAP_DIR}"
+if [ $(testVar $USE_CONFIGTOOL) ]; then
+    # Configure configtool before tweaking other things
+    echo "Installing configtool and running initial sync"
+    installDebianPackage "${DEBOOTSTRAP_DIR}" configtool
+    syncConfigtool "${DEBOOTSTRAP_DIR}"
 
-# Configure /etc/apt
-runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/apt"
-updateApt "${DEBOOTSTRAP_DIR}"
+    # Configure /etc/apt
+    runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/apt"
+    updateApt "${DEBOOTSTRAP_DIR}"
+fi
 
 
 # Standard packages
@@ -164,12 +206,16 @@ installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart
 # Raspberry pi specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp
 
-# Run other configtool things
-runConfigtool "${DEBOOTSTRAP_DIR}"
+if [ $(testVar $USE_CONFIGTOOL) ]; then
+    # Run other configtool things
+    runConfigtool "${DEBOOTSTRAP_DIR}"
+fi
 
-createKerberosKeytab "${DEBOOTSTRAP_DIR}" "host/${NEW_HOSTNAME}.${DOMAIN}@${KRB5_REALM}" "/etc/krb5.keytab"
-createKerberosKeytab "${DEBOOTSTRAP_DIR}" "music/${NEW_HOSTNAME}@${KRB5_REALM}" "/etc/krb5.music.keytab"
-changeOwnership "${DEBOOTSTRAP_DIR}" "/etc/krb5.music.keytab" "mpd"
+if [ $(testVar $USE_KERBEROS) ]; then
+    createKerberosKeytab "${DEBOOTSTRAP_DIR}" "host/${NEW_HOSTNAME}.${DOMAIN}@${KRB5_REALM}" "/etc/krb5.keytab"
+    createKerberosKeytab "${DEBOOTSTRAP_DIR}" "music/${NEW_HOSTNAME}@${KRB5_REALM}" "/etc/krb5.music.keytab"
+    changeOwnership "${DEBOOTSTRAP_DIR}" "/etc/krb5.music.keytab" "mpd"
+fi
 
 createUser "${DEBOOTSTRAP_DIR}" "michael" "Michael Howe"
 addUserToGroup "${DEBOOTSTRAP_DIR}" "michael" "adm"
@@ -187,33 +233,34 @@ CRYPT_PASSWORD=`mkpasswd ${TEMP_ROOT_PASSWORD} RP`
 chroot "${DEBOOTSTRAP_DIR}" usermod --password "${CRYPT_PASSWORD}" root
 
 enableStartStopDaemon "${DEBOOTSTRAP_DIR}"
-set -x
-# Now do the install
-DEVICE=/dev/sdg
+if [ $(testVar $WRITE_IMAGE) ]; then
+    set -x
+    # Now do the install
 
-if [ ! -b ${DEVICE} ]; then
-    echo "ERROR: device ${DEVICE} does not exist" >&2
-    exit 1
-fi
-parted --script ${DEVICE} mklabel msdos
-parted --script --align optimal ${DEVICE} mkpart primary fat16 '0%' 64M
-parted --script ${DEVICE} set 1 lba on
-parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
+    if [ ! -b ${DEVICE} ]; then
+        echo "ERROR: device ${DEVICE} does not exist" >&2
+        exit 1
+    fi
+    parted --script ${DEVICE} mklabel msdos
+    parted --script --align optimal ${DEVICE} mkpart primary fat16 '0%' 64M
+    parted --script ${DEVICE} set 1 lba on
+    parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
 
-mkfs.msdos ${DEVICE}1
-mkfs.ext4 ${DEVICE}2
+    mkfs.msdos ${DEVICE}1
+    mkfs.ext4 ${DEVICE}2
 
-TEMP_MOUNTPOINT="${APP_TEMPDIR}/install"
-mkdir -p "${TEMP_MOUNTPOINT}"
-mount ${DEVICE}2 "${TEMP_MOUNTPOINT}"
-mkdir "${TEMP_MOUNTPOINT}/boot"
-mount ${DEVICE}1 "${TEMP_MOUNTPOINT}/boot"
-rsync -avvP "${DEBOOTSTRAP_DIR}/" "${TEMP_MOUNTPOINT}/"
-sync
-umount "${TEMP_MOUNTPOINT}/boot"
-umount "${TEMP_MOUNTPOINT}"
+    TEMP_MOUNTPOINT="${APP_TEMPDIR}/install"
+    mkdir -p "${TEMP_MOUNTPOINT}"
+    mount ${DEVICE}2 "${TEMP_MOUNTPOINT}"
+    mkdir "${TEMP_MOUNTPOINT}/boot"
+    mount ${DEVICE}1 "${TEMP_MOUNTPOINT}/boot"
+    rsync -avvP "${DEBOOTSTRAP_DIR}/" "${TEMP_MOUNTPOINT}/"
+    sync
+    umount "${TEMP_MOUNTPOINT}/boot"
+    umount "${TEMP_MOUNTPOINT}"
 
-eject ${DEVICE}
+    eject ${DEVICE}
+fi  # $WRITE_IMAGE
 
 trap - EXIT
 cleanup
