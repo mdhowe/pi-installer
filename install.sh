@@ -105,9 +105,11 @@ echo "Copying firmware"
 mkdir -p "${DEBOOTSTRAP_DIR}/opt/"
 cp -R "${GIT_FIRMWARE_DIR}/hardfp/opt/"* "${DEBOOTSTRAP_DIR}/opt/"
 
+echo "Copying /boot"
 mkdir -p "${DEBOOTSTRAP_DIR}/boot"
 cp -R "${GIT_FIRMWARE_DIR}/boot/"* "${DEBOOTSTRAP_DIR}/boot/"
 
+echo "Copying kernel modules"
 mkdir -p "${DEBOOTSTRAP_DIR}/lib/modules"
 cp -R "${GIT_FIRMWARE_DIR}/modules/"* "${DEBOOTSTRAP_DIR}/lib/modules/"
 
