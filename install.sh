@@ -120,7 +120,7 @@ echo 'deb http://debian.internal.michaelhowe.org/ internal main contrib non-free
 echo 'deb http://archive.raspberrypi.org/debian/ wheezy main' > ${SOURCES_DIR}/raspi.list
 # DANGER WILL ROBINSON: Debian armhf packages are NOT COMPATIBLE with the pi,
 # and will not work (arch: all packages on the other hand are fine)
-echo 'deb http://mirror.ox.ac.uk/debian unstable main' >> ${SOURCES_LIST}
+#echo 'deb http://mirror.ox.ac.uk/debian unstable main' >> ${SOURCES_LIST}
 
 echo "Setting up local trust"
 
@@ -200,14 +200,16 @@ fi
 
 
 # Standard packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx
+installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx curl abr
 # System-specific specific packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart
+installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openafs-krb5 openafs-client
 # Raspberry pi specific packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp
+installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp wpasupplicant firmware-realtek
 
 if [ $(testVar $USE_CONFIGTOOL) ]; then
     # Run other configtool things
+    runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/abr"
+    chroot "${DEBOOTSTRAP_DIR}" abr -d
     runConfigtool "${DEBOOTSTRAP_DIR}"
 fi
 
@@ -232,6 +234,8 @@ echo "Setting temporary root password"
 CRYPT_PASSWORD=`mkpasswd ${TEMP_ROOT_PASSWORD} RP`
 chroot "${DEBOOTSTRAP_DIR}" usermod --password "${CRYPT_PASSWORD}" root
 
+echo "Installing openafs-dkms"
+installDebianPackage "${DEBOOTSTRAP_DIR}" openafs-modules-dkms
 enableStartStopDaemon "${DEBOOTSTRAP_DIR}"
 if [ $(testVar $WRITE_IMAGE) ]; then
     set -x
