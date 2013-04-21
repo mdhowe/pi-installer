@@ -115,7 +115,7 @@ copyKernelSource "${DEBOOTSTRAP_DIR}" "${GIT_KERNEL_DIR}" "/usr/src"
 echo "Configuring minimal apt setup"
 SOURCES_LIST="${DEBOOTSTRAP_DIR}/etc/apt/sources.list"
 SOURCES_DIR="${DEBOOTSTRAP_DIR}/etc/apt/sources.list.d"
-echo 'deb $MIRROR $RELEASE main contrib non-free rpi' > $SOURCES_LIST
+echo "deb $MIRROR $RELEASE main contrib non-free rpi" > $SOURCES_LIST
 echo 'deb http://debian.internal.michaelhowe.org/ internal main contrib non-free' >> $SOURCES_LIST
 echo 'deb http://archive.raspberrypi.org/debian/ wheezy main' > ${SOURCES_DIR}/raspi.list
 # DANGER WILL ROBINSON: Debian armhf packages are NOT COMPATIBLE with the pi,
