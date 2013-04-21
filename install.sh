@@ -177,17 +177,13 @@ echo "$NEW_HOSTNAME" > "${DEBOOTSTRAP_DIR}/etc/hostname"
 #
 # Preseed answers
 #
-TEMP_FILE=`tempfile`
-
 if [ $(testVar $USE_CONFIGTOOL) ]; then
-    wget --output-document=$TEMP_FILE http://dev.internal.michaelhowe.org/configtool.debconf
-    perl -p -i -e "s/NEW_HOST/$NEW_HOSTNAME/g" $TEMP_FILE
-    chroot ${DEBOOTSTRAP_DIR} debconf-set-selections < $TEMP_FILE
-fi
+    debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/syncmode select  subversion"
+    debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool  configtool/svn/username string ${NEW_HOSTNAME}.${DOMAIN}"
+    debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool  configtool/svn/source   string  https://config.internal.michaelhowe.org/svn/basic/sysconfig/systems/${NEW_HOSTNAME}.${DOMAIN}/root"
+    debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool  configtool/rsync/source string"
+    debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool  configtool/userskel/source  string  https://config.internal.michaelhowe.org/svn/basic/sysconfig/userskel"
 
-rm -f $TEMP_FILE
-
-if [ $(testVar $USE_CONFIGTOOL) ]; then
     # Configure configtool before tweaking other things
     echo "Installing configtool and running initial sync"
     installDebianPackage "${DEBOOTSTRAP_DIR}" configtool
