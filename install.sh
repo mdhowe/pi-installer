@@ -101,6 +101,7 @@ updateGitDirectory $GIT_FIRMWARE_DIR $GIT_FIRMWARE_URL "firmware"
 updateGitDirectory $GIT_KERNEL_DIR $GIT_KERNEL_URL "kernel"
 wget -O "${GIT_KERNEL_DIR}/Module.symvers" https://github.com/raspberrypi/firmware/raw/master/extra/Module.symvers
 
+echo "Copying firmware"
 mkdir -p "${DEBOOTSTRAP_DIR}/opt/"
 cp -R "${GIT_FIRMWARE_DIR}/hardfp/opt/"* "${DEBOOTSTRAP_DIR}/opt/"
 
@@ -182,6 +183,7 @@ if [ $(testVar $USE_CONFIGTOOL) ]; then
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/svn/username string ${NEW_HOSTNAME}.${DOMAIN}"
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/svn/source string https://config.internal.michaelhowe.org/svn/basic/sysconfig/systems/${NEW_HOSTNAME}.${DOMAIN}/root"
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/rsync/source string "
+    debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/rsync/source seen true"
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/userskel/source string https://config.internal.michaelhowe.org/svn/basic/sysconfig/userskel"
 
     # Configure configtool before tweaking other things
