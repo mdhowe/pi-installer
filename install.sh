@@ -113,6 +113,7 @@ echo "Copying kernel modules"
 mkdir -p "${DEBOOTSTRAP_DIR}/lib/modules"
 cp -R "${GIT_FIRMWARE_DIR}/modules/"* "${DEBOOTSTRAP_DIR}/lib/modules/"
 
+echo "Copying kernel source"
 copyKernelSource "${DEBOOTSTRAP_DIR}" "${GIT_KERNEL_DIR}" "/usr/src"
 
 echo "Configuring minimal apt setup"
