@@ -83,10 +83,14 @@ cleanup ()
 {
     enableStartStopDaemon "${DEBOOTSTRAP_DIR}" || true
     umountProc "${DEBOOTSTRAP_DIR}" || true
+}
+cleanup_err()
+{
+    cleanup
     echo "Command failed, cleaning up.  You need to manually remove '${APP_TEMPDIR}' yourself" >&2
 }
 
-trap 'cleanup' EXIT
+trap 'cleanup_err' EXIT
 
 downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}"
 
@@ -203,14 +207,19 @@ fi
 # Standard packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx curl abr
 # System-specific specific packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openafs-krb5 openafs-client
+installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openafs-krb5 openafs-client openafs-modules-source
 # Raspberry pi specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp wpasupplicant firmware-realtek
 
 if [ $(testVar $USE_CONFIGTOOL) ]; then
     # Run other configtool things
+    echo "Initial abr deployment"
     runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/abr"
     chroot "${DEBOOTSTRAP_DIR}" abr -d
+
+    echo "Applying any wireless configuration"
+    runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/wireless" "--post --ifpresent"
+    echo "Applying configtool"
     runConfigtool "${DEBOOTSTRAP_DIR}"
 fi
 
@@ -235,32 +244,43 @@ echo "Setting temporary root password"
 CRYPT_PASSWORD=`mkpasswd ${TEMP_ROOT_PASSWORD} RP`
 chroot "${DEBOOTSTRAP_DIR}" usermod --password "${CRYPT_PASSWORD}" root
 
-echo "Installing openafs-dkms"
-installDebianPackage "${DEBOOTSTRAP_DIR}" openafs-modules-dkms
 enableStartStopDaemon "${DEBOOTSTRAP_DIR}"
 if [ $(testVar $WRITE_IMAGE) ]; then
-    set -x
     # Now do the install
 
     if [ ! -b ${DEVICE} ]; then
         echo "ERROR: device ${DEVICE} does not exist" >&2
         exit 1
     fi
+
+    echo "Wiping device ${DEVICE}"
+    dd if=/dev/zero of=${DEVICE}
+
+    echo "Partitioning ${DEVICE}"
     parted --script ${DEVICE} mklabel msdos
     parted --script --align optimal ${DEVICE} mkpart primary fat16 '0%' 64M
     parted --script ${DEVICE} set 1 lba on
     parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
 
+    echo "Creating filesystems..."
     mkfs.msdos ${DEVICE}1
+    echo "/boot complete"
     mkfs.ext4 ${DEVICE}2
+    echo "/ complete"
+
+    echo
 
     TEMP_MOUNTPOINT="${APP_TEMPDIR}/install"
+    echo "Mounting under ${TEMP_MOUNTPOINT}"
     mkdir -p "${TEMP_MOUNTPOINT}"
     mount ${DEVICE}2 "${TEMP_MOUNTPOINT}"
     mkdir "${TEMP_MOUNTPOINT}/boot"
     mount ${DEVICE}1 "${TEMP_MOUNTPOINT}/boot"
+    echo "Copying files"
     rsync -avvP "${DEBOOTSTRAP_DIR}/" "${TEMP_MOUNTPOINT}/"
+    echo "Running final 'sync'"
     sync
+    echo "Unmounting"
     umount "${TEMP_MOUNTPOINT}/boot"
     umount "${TEMP_MOUNTPOINT}"
 
@@ -270,3 +290,5 @@ fi  # $WRITE_IMAGE
 trap - EXIT
 cleanup
 rm -rf "${APP_TEMPDIR}"
+
+echo "Install complete"

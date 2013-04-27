@@ -115,7 +115,8 @@ createKerberosKeytab ()
     local principal=$2
     local file=$3
 
-    KEYTAB_FILE="${prefix}/${file}"
+    local KEYTAB_FILE="${prefix}/${file}"
+    echo "Adding kerberos principal ${principal} to ${KEYTAB_FILE}"
     kadmin -q "ktadd -k ${KEYTAB_FILE} ${principal}"
 }
 
@@ -134,15 +135,19 @@ runConfigtool ()
 {
     local prefix=$1
     local destdir="/"
+    local opts="--nopost"
     if [ $# -gt 1 ]; then
         destdir=$2
+    fi
+    if [ $# -gt 2 ]; then
+        opts=$3
     fi
 
     assert "${LINENO}" -d "${prefix}"
 
     disableStartStopDaemon "${prefix}"
 #    trap "enableStartStopDaemon \"${prefix}\"" EXIT
-    chroot "${prefix}" configtool --nopost --force $destdir || logMessage "Configtool failed: $?"
+    chroot "${prefix}" configtool $opts --force $destdir || logMessage "Configtool failed: $?"
     enableStartStopDaemon "${prefix}"
 #    trap - EXIT
 
