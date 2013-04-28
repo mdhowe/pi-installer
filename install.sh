@@ -18,6 +18,7 @@ USE_DEBIAN_KEYRING=1
 USE_LOCAL_CERT=1
 USE_LOCAL_KEYRING=1
 WRITE_IMAGE=1
+DD_DEVICE=0
 
 # Tweak the following as necessary
 
@@ -255,8 +256,10 @@ if [ $(testVar $WRITE_IMAGE) ]; then
         exit 1
     fi
 
-    echo "Wiping device ${DEVICE}"
-    dd if=/dev/zero of=${DEVICE}
+    if [ $(testVar $DD_DEVICE) ]; then
+        echo "Wiping device ${DEVICE}"
+        dd if=/dev/zero of=${DEVICE} || true
+    fi
 
     echo "Partitioning ${DEVICE}"
     parted --script ${DEVICE} mklabel msdos
