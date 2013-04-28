@@ -150,23 +150,23 @@ installAptKeyFromURL "${DEBOOTSTRAP_DIR}" "${RPI_KEY}" "${RPI_KEY_SHA256}"
 # Go through all the keyrings we want included and drop them in $APT_GPG_PARTS directory.
 # Then, run apt-get update, and install the package for the keyring.
 # In the debian case, remove the file we created since the package creates individual ones
-if [ $(testVar $USE_LOCAL_KEYRING) ]; then
+if $(testVar $USE_LOCAL_KEYRING); then
     if [ -f "$ARCHIVE_KEYRING" ]; then
         cp "$ARCHIVE_KEYRING" "${DEBOOTSTRAP_DIR}/${ARCHIVE_KEYRING}"
     fi
 fi
-if [ $(testVar $USE_DEBIAN_KEYRING) ]; then
+if $(testVar $USE_DEBIAN_KEYRING); then
     if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
         cp "${DEBIAN_ARCHIVE_KEYRING}" "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
     fi
 fi
 updateApt "${DEBOOTSTRAP_DIR}"
 
-if [ $(testVar $USE_LOCAL_KEYRING) ]; then
+if $(testVar $USE_LOCAL_KEYRING); then
     [ -f "$ARCHIVE_KEYRING" ] && installDebianPackage ${DEBOOTSTRAP_DIR} mh-archive-keyring
 fi
 
-if [ $(testVar $USE_DEBIAN_KEYRING) ]; then
+if $(testVar $USE_DEBIAN_KEYRING); then
     if [ -f "${DEBIAN_ARCHIVE_KEYRING}" ]; then
         rm -f "${DEBOOTSTRAP_DIR}/${APT_GPG_PARTS}/debian-archive-keyring.gpg"
         installDebianPackage "${DEBOOTSTRAP_DIR}" debian-archive-keyring
@@ -188,7 +188,7 @@ echo "$NEW_HOSTNAME" > "${DEBOOTSTRAP_DIR}/etc/hostname"
 #
 # Preseed answers
 #
-if [ $(testVar $USE_CONFIGTOOL) ]; then
+if $(testVar $USE_CONFIGTOOL); then
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/syncmode select subversion"
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/svn/username string ${NEW_HOSTNAME}.${DOMAIN}"
     debconfSetSelection "${DEBOOTSTRAP_DIR}" "configtool configtool/svn/source string https://config.internal.michaelhowe.org/svn/basic/sysconfig/systems/${NEW_HOSTNAME}.${DOMAIN}/root"
@@ -214,7 +214,7 @@ installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openaf
 # Raspberry pi specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp wpasupplicant firmware-realtek
 
-if [ $(testVar $USE_CONFIGTOOL) ]; then
+if $(testVar $USE_CONFIGTOOL); then
     # Run other configtool things
     echo "Initial abr deployment"
     runConfigtool "${DEBOOTSTRAP_DIR}" "/etc/abr"
@@ -226,7 +226,7 @@ if [ $(testVar $USE_CONFIGTOOL) ]; then
     runConfigtool "${DEBOOTSTRAP_DIR}"
 fi
 
-if [ $(testVar $USE_KERBEROS) ]; then
+if $(testVar $USE_KERBEROS); then
     createKerberosKeytab "${DEBOOTSTRAP_DIR}" "host/${NEW_HOSTNAME}.${DOMAIN}@${KRB5_REALM}" "/etc/krb5.keytab"
     createKerberosKeytab "${DEBOOTSTRAP_DIR}" "music/${NEW_HOSTNAME}@${KRB5_REALM}" "/etc/krb5.music.keytab"
     changeOwnership "${DEBOOTSTRAP_DIR}" "/etc/krb5.music.keytab" "mpd"
@@ -248,7 +248,7 @@ CRYPT_PASSWORD=`mkpasswd ${TEMP_ROOT_PASSWORD} RP`
 chroot "${DEBOOTSTRAP_DIR}" usermod --password "${CRYPT_PASSWORD}" root
 
 enableStartStopDaemon "${DEBOOTSTRAP_DIR}"
-if [ $(testVar $WRITE_IMAGE) ]; then
+if $(testVar $WRITE_IMAGE); then
     # Now do the install
 
     if [ ! -b ${DEVICE} ]; then
@@ -256,7 +256,7 @@ if [ $(testVar $WRITE_IMAGE) ]; then
         exit 1
     fi
 
-    if [ $(testVar $DD_DEVICE) ]; then
+    if $(testVar $DD_DEVICE); then
         echo "Wiping device ${DEVICE}"
         dd if=/dev/zero of=${DEVICE} || true
     fi
