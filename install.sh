@@ -92,12 +92,14 @@ cleanup_err()
 
 trap 'cleanup_err' EXIT
 
+echo "Downloading raspbian GPG key"
 downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}"
 
 RASPBIAN_KEY_FILE=$(downloadGPGKey "${RASPBIAN_KEY}" "${RASPBIAN_KEY_SHA256}")
 if [ -d "$DEBOOTSTRAP_DIR" ]; then
     echo "Debootstrap directory $DEBOOTSTRAP_DIR already exists.  Skipping debootstrap step"
 else
+    echo "Running initial debootstrap"
     qemu-debootstrap --arch armhf --include=ca-certificates --keyring="${RASPBIAN_KEY_FILE}" $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
 fi
 
