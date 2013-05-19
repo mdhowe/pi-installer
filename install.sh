@@ -208,7 +208,7 @@ fi
 
 
 # Standard packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx curl abr
+installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx curl abr libpam-krb5 libpam-afs-session
 # System-specific specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openafs-krb5 openafs-client openafs-modules-source
 # Raspberry pi specific packages
@@ -258,17 +258,24 @@ if test $(testVar $WRITE_IMAGE) -eq 1; then
 
     if test $(testVar $DD_DEVICE) -eq 1; then
         echo "Wiping device ${DEVICE}"
-        dd if=/dev/zero of=${DEVICE} || true
+        dd if=/dev/zero of=${DEVICE} bs=1M || true
+        # Wait for dd to finish
+        sleep 30
+        sync
+        sleep 30
     fi
+#    else
+        echo "Clearing partition table of ${DEVICE}"
+        dd if=/dev/zero of=${DEVICE} bs=1k count=512
+#    fi
 
     echo "Partitioning ${DEVICE}"
     parted --script ${DEVICE} mklabel msdos
-    parted --script --align optimal ${DEVICE} mkpart primary fat16 '0%' 64M
-    parted --script ${DEVICE} set 1 lba on
+    parted --script --align optimal ${DEVICE} mkpart primary fat32 '0%' 64M
     parted --script --align optimal ${DEVICE} mkpart primary ext4 64M '100%'
 
     echo "Creating filesystems..."
-    mkfs.msdos ${DEVICE}1
+    mkfs.msdos -s 16 ${DEVICE}1
     echo "/boot complete"
     mkfs.ext4 ${DEVICE}2
     echo "/ complete"
