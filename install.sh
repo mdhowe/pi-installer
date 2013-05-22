@@ -17,6 +17,7 @@ USE_CONFIGTOOL=1
 USE_DEBIAN_KEYRING=1
 USE_LOCAL_CERT=1
 USE_LOCAL_KEYRING=1
+USE_PACKAGED_KERNEL=1
 WRITE_IMAGE=1
 DD_DEVICE=0
 
@@ -211,8 +212,15 @@ fi
 installDebianPackage "${DEBOOTSTRAP_DIR}" vim subversion zsh sudo htop krb5-user dctrl-tools libyaml-perl openbsd-inetd openssh-server munin-node less exim4-daemon-light bsd-mailx curl abr libpam-krb5 libpam-afs-session
 # System-specific specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openafs-krb5 openafs-client openafs-modules-source
+# Packages specific to my setup
+installDebianPackage "${DEBOOTSTRAP_DIR}" wpasupplicant firmware-realtek
 # Raspberry pi specific packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp wpasupplicant firmware-realtek
+installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp
+# Note that raspberrypi-bootloader also contains a kernel, which may overwrite
+# the kernel installed from git
+if test $(testVar $USE_PACKAGED_KERNEL) -eq 1; then
+    installDebianPackage "${DEBOOTSTRAP_DIR}" raspberrypi-bootloader
+fi
 
 if test $(testVar $USE_CONFIGTOOL) -eq 1; then
     # Run other configtool things
