@@ -257,7 +257,7 @@ copyKernelSource ()
 
 testVar ()
 {
-    local var=$1
+    local var=${1:-}
     if [ -z "$var" ]; then
         echo 0
     elif [ "$var" -eq "0" ]; then
