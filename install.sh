@@ -225,7 +225,7 @@ installDebianPackage "${DEBOOTSTRAP_DIR}" mpd alsa-utils kstart mpd-utils openaf
 # Packages specific to my setup
 installDebianPackage "${DEBOOTSTRAP_DIR}" wpasupplicant firmware-realtek
 # Raspberry pi specific packages
-installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp
+installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp ntpdate
 # Note that raspberrypi-bootloader also contains a kernel, which may overwrite
 # the kernel installed from git.  Fortunately, the
 # raspberrypi-bootloader-nokernel one doesn't
