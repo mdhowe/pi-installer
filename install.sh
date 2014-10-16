@@ -18,6 +18,8 @@ USE_DEBIAN_KEYRING=1
 USE_LOCAL_CERT=1
 USE_LOCAL_KEYRING=1
 USE_PACKAGED_KERNEL=1
+USE_GIT_KERNEL=0
+USE_GIT_FIRMWARE=0
 WRITE_IMAGE=1
 DD_DEVICE=0
 
@@ -105,29 +107,37 @@ else
     qemu-debootstrap --arch armhf --include=ca-certificates --keyring="${RASPBIAN_KEY_FILE}" $RELEASE "$DEBOOTSTRAP_DIR" $MIRROR
 fi
 
-updateGitDirectory $GIT_FIRMWARE_DIR $GIT_FIRMWARE_URL "firmware"
-updateGitDirectory $GIT_KERNEL_DIR $GIT_KERNEL_URL "kernel"
-wget -O "${GIT_KERNEL_DIR}/Module.symvers" https://github.com/raspberrypi/firmware/raw/master/extra/Module.symvers
+if test $(testVar $USE_GIT_FIRMWARE) -eq 1; then
+    updateGitDirectory $GIT_FIRMWARE_DIR $GIT_FIRMWARE_URL "firmware"
+fi
+if test $(testVar $USE_GIT_KERNEL) -eq 1; then
+    updateGitDirectory $GIT_KERNEL_DIR $GIT_KERNEL_URL "kernel"
+    wget -O "${GIT_KERNEL_DIR}/Module.symvers" https://github.com/raspberrypi/firmware/raw/master/extra/Module.symvers
+fi
 
-echo "Copying firmware"
-mkdir -p "${DEBOOTSTRAP_DIR}/opt/"
-cp -R "${GIT_FIRMWARE_DIR}/hardfp/opt/"* "${DEBOOTSTRAP_DIR}/opt/"
+if test $(testVar $USE_GIT_FIRMWARE) -eq 1; then
+    echo "Copying firmware"
+    mkdir -p "${DEBOOTSTRAP_DIR}/opt/"
+    cp -R "${GIT_FIRMWARE_DIR}/hardfp/opt/"* "${DEBOOTSTRAP_DIR}/opt/"
+fi
 
 echo "Copying /boot"
 mkdir -p "${DEBOOTSTRAP_DIR}/boot"
 cp -R "${GIT_FIRMWARE_DIR}/boot/"* "${DEBOOTSTRAP_DIR}/boot/"
 
-echo "Copying kernel modules"
-mkdir -p "${DEBOOTSTRAP_DIR}/lib/modules"
-cp -R "${GIT_FIRMWARE_DIR}/modules/"* "${DEBOOTSTRAP_DIR}/lib/modules/"
+if test $(testVar $USE_GIT_KERNEL) -eq 1; then
+    echo "Copying kernel modules"
+    mkdir -p "${DEBOOTSTRAP_DIR}/lib/modules"
+    cp -R "${GIT_FIRMWARE_DIR}/modules/"* "${DEBOOTSTRAP_DIR}/lib/modules/"
 
-echo "Copying kernel source"
-copyKernelSource "${DEBOOTSTRAP_DIR}" "${GIT_KERNEL_DIR}" "/usr/src"
+    echo "Copying kernel source"
+    copyKernelSource "${DEBOOTSTRAP_DIR}" "${GIT_KERNEL_DIR}" "/usr/src"
+fi
 
 echo "Configuring minimal apt setup"
 SOURCES_LIST="${DEBOOTSTRAP_DIR}/etc/apt/sources.list"
 SOURCES_DIR="${DEBOOTSTRAP_DIR}/etc/apt/sources.list.d"
-echo "deb $MIRROR $RELEASE main contrib non-free rpi" > $SOURCES_LIST
+echo "deb $MIRROR $RELEASE main contrib non-free rpi firmware" > $SOURCES_LIST
 echo 'deb http://debian.internal.michaelhowe.org/ internal main contrib non-free' >> $SOURCES_LIST
 echo 'deb http://archive.raspberrypi.org/debian/ wheezy main' > ${SOURCES_DIR}/raspi.list
 # DANGER WILL ROBINSON: Debian armhf packages are NOT COMPATIBLE with the pi,
@@ -217,9 +227,10 @@ installDebianPackage "${DEBOOTSTRAP_DIR}" wpasupplicant firmware-realtek
 # Raspberry pi specific packages
 installDebianPackage "${DEBOOTSTRAP_DIR}" raspi-config fake-hwclock ntp
 # Note that raspberrypi-bootloader also contains a kernel, which may overwrite
-# the kernel installed from git
+# the kernel installed from git.  Fortunately, the
+# raspberrypi-bootloader-nokernel one doesn't
 if test $(testVar $USE_PACKAGED_KERNEL) -eq 1; then
-    installDebianPackage "${DEBOOTSTRAP_DIR}" raspberrypi-bootloader
+    installDebianPackage "${DEBOOTSTRAP_DIR}" raspberrypi-bootloader-nokernel linux-image-rpi-rpfv linux-headers-rpi-rpfv
 fi
 
 if test $(testVar $USE_CONFIGTOOL) -eq 1; then
